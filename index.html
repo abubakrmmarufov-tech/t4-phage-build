@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Bacteriophage T4 — a virus builds itself</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2213%22 r=%229%22 fill=%22%237fe3d0%22/><rect x=%2214%22 y=%2220%22 width=%224%22 height=%229%22 fill=%22%237fe3d0%22/></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#dfe9ef;
+    --dim:#8ea2ad;
+    --faint:#5d727e;
+    --accent:#7fe3d0;
+    --line:rgba(180,210,220,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;width:100%;background:#03060a;overflow:hidden}
+  body{font-family:'DM Sans',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+  #app{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+
+  /* ---------- top-left quiet title + hint ---------- */
+  #masthead{position:fixed;top:26px;left:30px;z-index:10;pointer-events:none;user-select:none;
+    opacity:0;animation:fadein 1.6s .2s ease forwards;max-width:min(46vw,540px)}
+  #masthead .kicker{font:500 10px/1 'Space Grotesk',sans-serif;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);opacity:.85;margin-bottom:12px}
+  #masthead h1{font:400 clamp(19px,2vw,26px)/1.18 'Space Grotesk',sans-serif;letter-spacing:-.01em;color:#eef5f7;font-weight:400}
+  #masthead h1 em{font-style:normal;color:var(--dim)}
+  #masthead .hint{margin-top:12px;font:300 12px/1.5 'DM Sans',sans-serif;color:var(--dim);letter-spacing:.01em}
+  @keyframes fadein{to{opacity:1}}
+
+  /* ---------- chapter indicator ---------- */
+  #chapter{position:fixed;top:28px;right:30px;z-index:10;text-align:right;pointer-events:none;user-select:none;
+    opacity:0;animation:fadein 1.4s .5s ease forwards}
+  #chapter .num{font:300 11px/1 'Space Grotesk',sans-serif;color:var(--faint);letter-spacing:.2em}
+  #chapter .name{font:400 14px/1.3 'Space Grotesk',sans-serif;color:var(--ink);margin-top:7px;letter-spacing:.02em}
+  #chapter .desc{font:300 11px/1.45 'DM Sans',sans-serif;color:var(--dim);margin-top:5px;max-width:230px;margin-left:auto}
+
+  /* ---------- labels ---------- */
+  #labels{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+  .label{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+    font:400 11px/1 'Space Grotesk',sans-serif;letter-spacing:.06em;color:#cfe0e5;
+    padding:5px 9px;border:1px solid var(--line);border-radius:3px;
+    background:rgba(6,12,17,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;transition:opacity .35s ease;will-change:transform,opacity}
+  .label .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);
+    margin-right:7px;vertical-align:middle;box-shadow:0 0 8px var(--accent)}
+  .label.on{opacity:1}
+  .leader{position:absolute;height:1px;background:linear-gradient(90deg,rgba(127,227,208,.55),rgba(127,227,208,0));
+    transform-origin:0 50%;pointer-events:none;opacity:0;transition:opacity .35s ease}
+  .leader.on{opacity:1}
+
+  /* ---------- bottom transport ---------- */
+  #transport{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:12;
+    width:min(760px,calc(100vw - 60px));display:flex;align-items:center;gap:16px;
+    opacity:0;animation:fadein 1.4s .9s ease forwards}
+  .btn{pointer-events:auto;cursor:pointer;user-select:none;flex:0 0 auto;
+    height:34px;min-width:34px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    border:1px solid var(--line);border-radius:4px;background:rgba(9,16,22,.6);color:var(--ink);
+    font:500 11px/1 'Space Grotesk',sans-serif;letter-spacing:.08em;
+    transition:border-color .2s,background .2s,color .2s;backdrop-filter:blur(6px)}
+  .btn:hover{border-color:rgba(127,227,208,.5);color:#fff;background:rgba(16,28,35,.7)}
+  .btn.active{color:var(--accent);border-color:rgba(127,227,208,.45)}
+  .btn svg{width:12px;height:12px;fill:currentColor}
+  #scrubWrap{position:relative;flex:1 1 auto;height:34px;display:flex;align-items:center;pointer-events:auto}
+  #scrub{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;outline:none;
+    background:linear-gradient(90deg,var(--accent) 0%,var(--accent) 0%,rgba(160,190,200,.18) 0%,rgba(160,190,200,.18) 100%);
+    cursor:pointer}
+  #scrub::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+    background:#dff5ee;border:2px solid #12222a;box-shadow:0 0 0 1px rgba(127,227,208,.6),0 0 10px rgba(127,227,208,.6);cursor:grab}
+  #scrub::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#dff5ee;border:2px solid #12222a;cursor:grab}
+  #time{font:400 11px/1 'Space Grotesk',sans-serif;color:var(--dim);flex:0 0 auto;min-width:82px;text-align:right;letter-spacing:.05em;font-variant-numeric:tabular-nums}
+  #chapters{position:absolute;top:-16px;left:0;right:0;height:10px;pointer-events:none}
+  .tick{position:absolute;top:0;width:1px;height:6px;background:rgba(150,180,190,.28)}
+  .tick span{position:absolute;top:8px;left:0;transform:translateX(-50%);font:400 8px/1 'Space Grotesk',sans-serif;color:var(--faint);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+
+  /* ---------- view + sound controls (bottom-left cluster) ---------- */
+  #tools{position:fixed;left:30px;bottom:26px;z-index:12;display:flex;gap:9px;align-items:center;
+    opacity:0;animation:fadein 1.4s 1.1s ease forwards}
+  #viewSel{pointer-events:auto;cursor:pointer;height:34px;padding:0 30px 0 12px;border:1px solid var(--line);border-radius:4px;
+    background:rgba(9,16,22,.6);color:var(--ink);font:500 11px/1 'Space Grotesk',sans-serif;letter-spacing:.08em;
+    appearance:none;-webkit-appearance:none;outline:none;backdrop-filter:blur(6px)}
+  #viewSel:hover{border-color:rgba(127,227,208,.5)}
+  #viewSel option{background:#0b141b;color:#dfe9ef}
+
+  /* ---------- sound ---------- */
+  #soundHint{position:fixed;right:30px;bottom:26px;z-index:12;
+    opacity:0;animation:fadein 1.4s 1.3s ease forwards}
+
+  /* ---------- loading ---------- */
+  #loader{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:#03060a;
+    transition:opacity .45s ease;font:300 12px/1 'Space Grotesk',sans-serif;letter-spacing:.3em;color:var(--dim);text-transform:uppercase}
+  #loader.gone{opacity:0;pointer-events:none}
+
+  /* ---------- loop fade ---------- */
+  #fade{position:fixed;inset:0;z-index:8;background:#03060a;opacity:0;pointer-events:none}
+
+  /* ---------- error ---------- */
+  #err{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:40px;background:#05080c;
+    font:400 13px/1.6 monospace;color:#ff9d8a;white-space:pre-wrap;text-align:left}
+
+  @media (max-width:720px){
+    #masthead{top:18px;left:18px;max-width:70vw}
+    #chapter{display:none}
+    #tools{left:18px;bottom:74px}
+    #soundHint{right:18px;bottom:74px}
+    #transport{bottom:18px;width:calc(100vw - 36px)}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="masthead">
+  <div class="kicker">Bacteriophage T4 · self-assembly</div>
+  <h1>A virus builds itself<em>, then infects.</em></h1>
+  <div class="hint">Drag to orbit · scroll to zoom · scrub the timeline · L toggles labels · Space plays / pauses</div>
+</div>
+
+<div id="chapter">
+  <div class="num" id="chNum">01 / 08</div>
+  <div class="name" id="chName">Capsid assembly</div>
+  <div class="desc" id="chDesc">Protein subunits dock into an elongated shell.</div>
+</div>
+
+<div id="labels"></div>
+
+<div id="transport">
+  <button class="btn" id="playBtn" title="Play / pause (Space)">
+    <svg id="playIcon" viewBox="0 0 12 12"><path d="M2.5 1.5 L9.5 6 L2.5 10.5 Z"/></svg>
+  </button>
+  <div id="scrubWrap">
+    <div id="chapters"></div>
+    <input id="scrub" type="range" min="0" max="30" step="0.001" value="0" aria-label="Timeline" />
+  </div>
+  <div id="time">00.0 / 30.0s</div>
+</div>
+
+<div id="tools">
+  <button class="btn active" id="labelBtn" title="Toggle labels (L)">Labels</button>
+  <select id="viewSel" title="Camera view">
+    <option value="hero">Overview</option>
+    <option value="head">Head &amp; DNA</option>
+    <option value="tail">Tail &amp; baseplate</option>
+    <option value="baseplate">Baseplate</option>
+    <option value="infection">Infection</option>
+    <option value="side">Side profile</option>
+  </select>
+</div>
+
+<div id="soundHint"><button class="btn" id="soundBtn">Enable sound</button></div>
+
+<div id="fade"></div>
+<div id="loader">Assembling</div>
+<div id="err"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./js/three.module.js",
+    "three/addons/": "./js/addons/"
+  }
+}
+</script>
+<script type="module" src="./js/main.js?v=10"></script>
+</body>
+</html>
